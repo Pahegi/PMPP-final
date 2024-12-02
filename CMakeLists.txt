@@ -17,7 +17,12 @@ if(MSVC)
 	add_link_options(/NODEFAULTLIB:LIBCMT)
 endif()
 
-add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+add_compile_options(
+	$<$<COMPILE_LANGUAGE:CUDA>:--default-stream=per-thread>
+	$<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>
+	$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+	$<$<COMPILE_LANGUAGE:CUDA>:-Xptxas=-v>
+)
 
 add_library(
 	pmpp_final
@@ -57,6 +62,8 @@ include(Catch)
 add_executable(
 	test_pmpp_final
 	test_pmpp_final.cpp
+	test_data_loader.cpp
+	test_data_loader.hpp
 )
 
 target_link_libraries(

@@ -1,13 +1,17 @@
 #include <waveform_evolution.hpp>
 
+#include "test_data_loader.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <bit>
+#include <unordered_set>
 #include <span>
 #include <vector>
 
 std::vector<std::uint64_t> evolve_operator_host(
-	std::span<std::uint64_t> host_wavefunction,
+	std::span<std::uint64_t const> host_wavefunction,
 	std::uint64_t activation, std::uint64_t deactivation
 )
 {
@@ -27,9 +31,9 @@ std::vector<std::uint64_t> evolve_operator_host(
 }
 
 std::vector<std::uint64_t> evolve_ansatz_host(
-	std::span<std::uint64_t> host_wavefunction,
-	std::span<std::uint64_t> host_activations,
-	std::span<std::uint64_t> host_deactivations
+	std::span<std::uint64_t const> host_wavefunction,
+	std::span<std::uint64_t const> host_activations,
+	std::span<std::uint64_t const> host_deactivations
 )
 {
 	using std::size;
@@ -55,7 +59,102 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	return result;
 }
 
-TEST_CASE("Trivial test", "[trivial]")
+TEST_CASE("Self test input data", "[self-test]")
 {
-	REQUIRE(1 == 1);
+	test_data_loader loader("example_evolution.bin");
+
+	auto electrons = loader.electrons();
+	auto orbitals = loader.single_electron_density_count();
+	auto activations = loader.activations();
+	auto deactivations = loader.deactivations();
+
+	REQUIRE(activations.size() == loader.ansatz_size());
+	REQUIRE(deactivations.size() == loader.ansatz_size());
+
+	auto orbital_mask = (orbitals < 64 ? std::uint64_t(1) << orbitals : 0) - 1;
+
+	for(std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i)
+	{
+		auto n_activations = std::popcount(activations[i]);
+		auto n_deactivations = std::popcount(deactivations[i]);
+
+		REQUIRE((activations[i] & deactivations[i]) == 0);
+
+		REQUIRE((activations[i] & ~orbital_mask) == 0);
+		REQUIRE((deactivations[i] & ~orbital_mask) == 0);
+
+		REQUIRE(n_activations > 0);
+		REQUIRE(n_activations <= 2);
+		REQUIRE(n_activations == n_deactivations);
+	}
+
+	std::size_t step = 0;
+	loader.for_each_step([&] (
+		std::span<std::uint64_t const> wfn_in,
+		std::span<std::uint64_t const> wfn_out,
+		std::uint64_t activation,
+		std::uint64_t deactivation
+	) {
+		using std::begin;
+		using std::end;
+
+		REQUIRE(activation == activations[step]);
+		REQUIRE(deactivation == deactivations[step]);
+
+		auto wfn_in_set = std::unordered_set(begin(wfn_in), end(wfn_in));
+		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+		REQUIRE(wfn_in_set.size() == wfn_in.size());
+		REQUIRE(wfn_out_set.size() == wfn_out.size());
+
+		REQUIRE(wfn_in.size() <= wfn_out.size());
+		for(auto v : wfn_in)
+			wfn_out_set.erase(v);
+		REQUIRE(wfn_out_set.size() == wfn_out.size() - wfn_in.size());
+
+		if(step == 0)
+		{
+			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&] (std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&] (std::uint64_t v) { return std::popcount(v) == electrons; }));
+		}
+		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&] (std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&] (std::uint64_t v) { return std::popcount(v) == electrons; }));
+
+		++step;
+	});
+
+	REQUIRE(step == loader.ansatz_size());
+}
+
+TEST_CASE("Test evolve operator", "[simple]")
+{
+	using std::begin;
+	using std::end;
+
+	test_data_loader loader("example_evolution.bin");
+	loader.for_each_step([&] (
+		std::span<std::uint64_t const> wfn_in,
+		std::span<std::uint64_t const> wfn_out,
+		std::uint64_t activation,
+		std::uint64_t deactivation
+	) {
+		auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
+		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+		auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
+		REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
+		REQUIRE(wfn_out_set == wfn_out_dut_set);
+	});
+}
+
+TEST_CASE("Test evolve ansatz", "[simple]")
+{
+	using std::begin;
+	using std::end;
+
+	test_data_loader loader("example_evolution.bin");
+	auto [wfn_in, wfn_out] = loader.first_and_last_wavefunction();
+	auto wfn_out_dut = evolve_ansatz_host(wfn_in, loader.activations(), loader.deactivations());
+	auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+	auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
+	REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
+	REQUIRE(wfn_out_set == wfn_out_dut_set);
 }
