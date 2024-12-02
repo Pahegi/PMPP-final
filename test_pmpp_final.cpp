@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <span>
 #include <vector>
+#include <iostream>
 
 std::vector<std::uint64_t> evolve_operator_host(
 	std::span<std::uint64_t const> host_wavefunction,
@@ -137,6 +138,10 @@ TEST_CASE("Test evolve operator", "[simple]")
 		std::uint64_t activation,
 		std::uint64_t deactivation
 	) {
+		// print wfn_in!!!
+		for (auto i : wfn_in) {
+			std::cout << i << " ";
+		}
 		auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
 		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
 		auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
