@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.26 FATAL_ERROR)
 project(pmpp_final CXX CUDA)
 
 # cmake standard build options
-option(BUILD_TESTING "Control whether the CTest module invokes enable_testing()" OFF)
+option(BUILD_TESTING "Control whether the CTest module invokes enable_testing()" ON)
 option(BUILD_SHARED_LIBS "Tell add_library() to default to SHARED libraries, instead of STATIC libraries, when called with no explicit library type" OFF)
 
 foreach(lang CXX CUDA)
