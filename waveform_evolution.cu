@@ -44,16 +44,21 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 )
 {
 	// create output array double the size of input
+	printf("evolve_operator: Creating Output Array\n");
 	auto wave_out = pmpp::make_managed_cuda_array<std::uint64_t>(2 * size(device_wavefunction));
 	auto wave_out_span = cuda::std::span(wave_out.get(), 2 * size(device_wavefunction));
+	
+	printf("evolve_operator: Copying Wavefunctions to output Array\n");
 	std::copy_n(device_wavefunction.data(), size(device_wavefunction), wave_out_span.data());
 
 	// create size cuda pointer
+	printf("evolve_operator: Creating Size Array\n");
 	auto num_elements = pmpp::make_managed_cuda_array<std::size_t>(1);  // TODO make better
 	num_elements[0] = size(device_wavefunction);
 	auto num_blocks = 32;
 	auto threads_per_block = num_elements[0] / num_blocks; 
 
+	printf("evolve_operator: Launching Kernel\n");
 	evolve_operator_kernel<<<num_blocks, threads_per_block>>>(
 		device_wavefunction.data(),
 		wave_out_span.data(),
@@ -62,6 +67,7 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 		deactivation
 	);
 
+	printf("evolve_operator: Returning output array\n");
 	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result {wave_out_span.data(), num_elements[0]};
 	return result;
 
@@ -104,8 +110,8 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 	// 	}
 	// }
 
-	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result {wave_out_span.data(), output_elements};
-	return result;
+	// cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result {wave_out_span.data(), output_elements};
+	// return result;
 }
 
 cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
