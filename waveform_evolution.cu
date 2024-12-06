@@ -1,4 +1,6 @@
 #include <waveform_evolution.hpp>
+#include <thrust/sort.h>
+#include <thrust/unique.h>
 #include <algorithm>
 
 
@@ -10,9 +12,12 @@ __global__ void evolve_operator_kernel(
 	std::uint64_t const activation,
 	std::uint64_t const deactivation
 )
-{
+{	
+
 	size_t output_elements = *size;
 	auto op_ad = activation ^ deactivation;
+
+	size_t idx = 0;
 
 	// only thread 0 (sequential implementation test), MASSIVELY PARALLEL!!!
 	if (threadIdx.x == 0 && blockIdx.x == 0) {
@@ -24,7 +29,7 @@ __global__ void evolve_operator_kernel(
 			auto check_activation = activation & (~wave);
 			uint64_t activate = check_activation == activation;
 			uint64_t deactivate = check_deactivation == deactivation;
-			auto op = activate * deactivate * op_ad;
+			auto op = (activate & deactivate) * op_ad;
 			auto wave_new = op ^ wave;
 
 			// insert new wavefunction, if wave_new != wave
@@ -34,6 +39,8 @@ __global__ void evolve_operator_kernel(
 			}
 		}
 		*size = output_elements;
+
+		printf("Block: %d Thread: %d Output Elements: %lu\n", threadIdx.x, blockIdx.x, output_elements);
 
 	}
 }
@@ -56,7 +63,8 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 	auto num_elements = pmpp::make_managed_cuda_array<std::size_t>(1);  // TODO make better
 	num_elements[0] = size(device_wavefunction);
 	auto num_blocks = 32;
-	auto threads_per_block = num_elements[0] / num_blocks; 
+	auto threads_per_block = (num_elements[0] / num_blocks) + (num_elements[0] % num_blocks > 0 ? 1 : 0); 
+	// ((global_size / block_size) + (global_size % block_size > 0 ? 1 : 0));
 
 	printf("evolve_operator: Launching Kernel\n");
 	evolve_operator_kernel<<<num_blocks, threads_per_block>>>(
@@ -67,8 +75,26 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 		deactivation
 	);
 
+
+	
+	cudaDeviceSynchronize();
+
+	thrust::sort(wave_out_span.data(), wave_out_span.data()+num_elements[0]);
+
+	cudaDeviceSynchronize();
+
+	size_t *new_end = thrust::unique(wave_out_span.data(), wave_out_span.data()+num_elements[0]);
+
+	for(size_t i=0; i<num_elements[0]; i++){
+		printf("%lu ", wave_out_span[i]);
+	}
+	printf("\n");
+
+	cudaDeviceSynchronize();
+
+	printf("Num elements %lu\n", num_elements[0]);
 	printf("evolve_operator: Returning output array\n");
-	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result {wave_out_span.data(), num_elements[0]};
+	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result {wave_out_span.data(), (new_end - wave_out_span.data())};
 	return result;
 
 

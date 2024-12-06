@@ -152,11 +152,11 @@ TEST_CASE("Test evolve operator", "[simple]")
 		}
 		printf("size of wfn_in: %lu\n", wfn_in.size());
 		printf("size of wfn_out: %lu\n", wfn_out.size());
-		// auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
-		// auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
-		// auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
-		// REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
-		// REQUIRE(wfn_out_set == wfn_out_dut_set);
+		auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
+		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+		auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
+		REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
+		REQUIRE(wfn_out_set == wfn_out_dut_set);
 	});
 }
 
