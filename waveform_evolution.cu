@@ -104,7 +104,7 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 	cuda::std::span<std::uint64_t const> deactivations) {
 	/* TODO */
 	size_t iterations = activations.size();
-	size_t result_size;
+	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result;
 	auto wave_out = pmpp::make_managed_cuda_array<std::uint64_t>(device_wavefunction.size());
 	auto wave_out_span = cuda::std::span(wave_out.get(), device_wavefunction.size());
 
@@ -130,18 +130,24 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 			auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
 		}
 		*/
-		auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
+		result = evolve_operator(wave_out_span, activations[i], deactivations[i]);
 
-		printf("evolve_ansatz: Result_size=%lu\n", result_size);
+		printf("evolve_ansatz: Result_size=%lu\n", result.second);
 		printf("evolve_ansatz: Entries of wavefunction:\n");
-		for (size_t j = 0; j < result_size; j++) {
-			printf("%lu ", result_wavefunct[j]);
+		for (size_t j = 0; j < result.second; j++) {
+			printf("%lu ", result.first[j]);
 		}
+		printf("\n");
 
-		wave_out_span = cuda::std::span(result_wavefunct.get(), 2 * result_size);
+		wave_out_span = cuda::std::span(result.first.get(), result.second);
 	}
 
-	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result{wave_out_span.data(), result_size};
+	printf("evolve_ansatz: Entries of wavefunction:\n");
+	for (size_t j = 0; j < result.second; j++) {
+		printf("%lu ", result.first[j]);
+	}
+	printf("\n");
+	printf("evolve_ansatz: Returning number of densities after evolution: %lu\n", result.second);
 	return result;
 	// return {nullptr, 0};
 }

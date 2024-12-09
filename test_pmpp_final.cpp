@@ -162,6 +162,12 @@ TEST_CASE("Test evolve ansatz", "[simple]") {
 	test_data_loader loader("example_evolution.bin");
 	auto [wfn_in, wfn_out] = loader.first_and_last_wavefunction();
 	auto wfn_out_dut = evolve_ansatz_host(wfn_in, loader.activations(), loader.deactivations());
+	printf("size of wfn_out: %lu\n", wfn_out_dut.size());
+	printf("elements of wfn_out: \n");
+	for (auto i : wfn_out_dut) {
+		std::cout << i << " ";
+	}
+	printf("\n");
 	auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
 	auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
 	REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
