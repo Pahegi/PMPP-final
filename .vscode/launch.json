@@ -1,0 +1,35 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "CUDA C++: Launch",
+			"type": "cuda-gdb",
+			"request": "launch",
+			"program": "/home/kurse/kurs00082/ph37bilu/PMPP/PMPP-final/build/test_pmpp_final",
+			"stopAtEntry": false,
+			"environment": [
+				{
+					"name": "LD_LIBRARY_PATH",
+					"value": "/shared/apps/gcc/13.1.0/lib64:/shared/apps/cuda/12.5/compute-sanitizer:/shared/apps/cuda/12.5/nvvm/lib64:/shared/apps/cuda/12.5/lib64:/opt/slurm/current/lib:/opt/slurm/current/lib/slurm"
+				}
+			],
+			"cwd": "/home/kurse/kurs00082/ph37bilu/PMPP/PMPP-final/",
+		},
+		{
+			"name": "CUDA C++: Attach",
+			"type": "cuda-gdb",
+			"request": "attach",
+			"program": "/home/kurse/kurs00082/ph37bilu/PMPP/PMPP-final/build/test_pmpp_final",
+			"environment": [
+				{
+					"name": "LD_LIBRARY_PATH",
+					"value": "/shared/apps/gcc/13.1.0/lib64:/shared/apps/cuda/12.5/compute-sanitizer:/shared/apps/cuda/12.5/nvvm/lib64:/shared/apps/cuda/12.5/lib64:/opt/slurm/current/lib:/opt/slurm/current/lib/slurm"
+				}
+			],
+			"cwd": "/home/kurse/kurs00082/ph37bilu/PMPP/PMPP-final/",
+		}
+	]
+}
