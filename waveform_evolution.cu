@@ -53,9 +53,8 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 	std::uint64_t activation, std::uint64_t deactivation) {
 	// create output array double the size of input
 
-	printf("\n Calling Evolve Operator function\n");
+	printf("evolce_operator: starting with %u densities\n", device_wavefunction.size());
 	printf("Entries in the passing array:\n");
-
 	for (size_t k = 0; k < device_wavefunction.size(); k++) {
 		printf("%lu ", device_wavefunction[k]);
 	}
@@ -85,7 +84,7 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 		deactivation);
 	cudaDeviceSynchronize();
 
-	printf("Kernel finished\n");
+	printf("evolve_operator: Kernel finished\n");
 
 	// Sort and remove duplicates
 	printf("evolve_operator: Sorting and Removing Duplicates\n");
@@ -94,7 +93,9 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 
 	// Check if the first element is zero and adjust the return value
 	size_t shift = (wave_out_span[0] == 0) ? 1 : 0;
-	return {pmpp::cuda_ptr<std::uint64_t[]>(wave_out.get() + shift), static_cast<std::size_t>(new_end - wave_out_span.data() - shift)};
+	size_t num_ed_out = static_cast<std::size_t>(new_end - wave_out_span.data() - shift);
+	printf("evolve_operator: Number of densities after evolution: %lu\n", num_ed_out);
+	return {pmpp::cuda_ptr<std::uint64_t[]>(wave_out.get() + shift), num_ed_out};
 }
 
 cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
@@ -109,19 +110,19 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 
 	printf("---------------------------------------------------------------------\n");
 
-	printf("evolve_operator: Copying Wavefunctions to output Array\n");
+	printf("evolve_ansatz: Copying Wavefunctions to output Array\n");
 	std::copy_n(device_wavefunction.data(), device_wavefunction.size(), wave_out_span.data());
 	// uint64_t activation
 
-	printf("Initial number of operators: %lu\n", iterations);
-	printf("Entries of wavefunction:\n");
+	printf("evolve_ansatz: Initial number of operators: %lu\n", iterations);
+	printf("evolve_ansatz: Entries of wavefunction:\n");
 
 	for (size_t k = 0; k < device_wavefunction.size(); k++) {
 		printf("%lu ", device_wavefunction.data()[k]);
 	}
 	printf("\n");
 	for (size_t i = 0; i < iterations; i++) {
-		printf("Loop Number: %lu\n", i);
+		printf("evolve_ansatz: Loop Number: %lu\n", i);
 		/*
 		if (i == 0){
 			auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
@@ -131,13 +132,13 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 		*/
 		auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
 
-		printf("Result_size=%lu\n", result_size);
-		printf("Entries of wavefunction:\n");
+		printf("evolve_ansatz: Result_size=%lu\n", result_size);
+		printf("evolve_ansatz: Entries of wavefunction:\n");
 		for (size_t j = 0; j < result_size; j++) {
 			printf("%lu ", result_wavefunct[j]);
 		}
 
-		auto wave_out_span = cuda::std::span(result_wavefunct.get(), 2 * result_size);
+		wave_out_span = cuda::std::span(result_wavefunct.get(), 2 * result_size);
 	}
 
 	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result{wave_out_span.data(), result_size};
