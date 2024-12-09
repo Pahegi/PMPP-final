@@ -1,24 +1,23 @@
+#include <stdio.h>
+
+#include <algorithm>
+#include <bit>
+#include <catch2/catch_test_macros.hpp>
+#include <iostream>
+#include <span>
+#include <unordered_set>
+#include <vector>
 #include <waveform_evolution.hpp>
 
 #include "test_data_loader.hpp"
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
-#include <bit>
-#include <unordered_set>
-#include <span>
-#include <vector>
-#include <iostream>
-#include <stdio.h>
-
 std::vector<std::uint64_t> evolve_operator_host(
 	std::span<std::uint64_t const> host_wavefunction,
-	std::uint64_t activation, std::uint64_t deactivation
-)
-{
-	using std::size;
+	std::uint64_t activation, std::uint64_t deactivation) {
 	using std::data;
+	using std::size;
+
+	auto t0 = std::chrono::system_clock::now();
 
 	printf("evolve_operator_host: Allocating managed cuda array for wavefunctions\n");
 	printf("host_wavefunction.size(): %lu\n", host_wavefunction.size());
@@ -34,19 +33,20 @@ std::vector<std::uint64_t> evolve_operator_host(
 
 	printf("evolve_operator_host: Copying result back to host\n");
 	std::vector<std::uint64_t> result(result_size);
-	if(result_size)
+	if (result_size)
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
+
+	auto t1 = std::chrono::system_clock::now();
+	std::printf("Time: %ld µs\n", std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 	return result;
 }
 
 std::vector<std::uint64_t> evolve_ansatz_host(
 	std::span<std::uint64_t const> host_wavefunction,
 	std::span<std::uint64_t const> host_activations,
-	std::span<std::uint64_t const> host_deactivations
-)
-{
-	using std::size;
+	std::span<std::uint64_t const> host_deactivations) {
 	using std::data;
+	using std::size;
 
 	auto device_wavefunction_ptr = pmpp::make_managed_cuda_array<std::uint64_t>(size(host_wavefunction));
 	auto device_wavefunction = cuda::std::span(device_wavefunction_ptr.get(), size(host_wavefunction));
@@ -63,13 +63,13 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	auto [result_wavefunction, result_size] = evolve_ansatz(device_wavefunction, device_activations, device_deactivations);
 
 	std::vector<std::uint64_t> result(result_size);
-	if(result_size)
+	if (result_size)
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
+
 	return result;
 }
 
-TEST_CASE("Self test input data", "[self-test]")
-{
+TEST_CASE("Self test input data", "[self-test]") {
 	test_data_loader loader("example_evolution.bin");
 
 	auto electrons = loader.electrons();
@@ -82,8 +82,7 @@ TEST_CASE("Self test input data", "[self-test]")
 
 	auto orbital_mask = (orbitals < 64 ? std::uint64_t(1) << orbitals : 0) - 1;
 
-	for(std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i)
-	{
+	for (std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i) {
 		auto n_activations = std::popcount(activations[i]);
 		auto n_deactivations = std::popcount(deactivations[i]);
 
@@ -98,12 +97,11 @@ TEST_CASE("Self test input data", "[self-test]")
 	}
 
 	std::size_t step = 0;
-	loader.for_each_step([&] (
-		std::span<std::uint64_t const> wfn_in,
-		std::span<std::uint64_t const> wfn_out,
-		std::uint64_t activation,
-		std::uint64_t deactivation
-	) {
+	loader.for_each_step([&](
+							 std::span<std::uint64_t const> wfn_in,
+							 std::span<std::uint64_t const> wfn_out,
+							 std::uint64_t activation,
+							 std::uint64_t deactivation) {
 		using std::begin;
 		using std::end;
 
@@ -116,17 +114,16 @@ TEST_CASE("Self test input data", "[self-test]")
 		REQUIRE(wfn_out_set.size() == wfn_out.size());
 
 		REQUIRE(wfn_in.size() <= wfn_out.size());
-		for(auto v : wfn_in)
+		for (auto v : wfn_in)
 			wfn_out_set.erase(v);
 		REQUIRE(wfn_out_set.size() == wfn_out.size() - wfn_in.size());
 
-		if(step == 0)
-		{
-			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&] (std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
-			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&] (std::uint64_t v) { return std::popcount(v) == electrons; }));
+		if (step == 0) {
+			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
 		}
-		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&] (std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
-		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&] (std::uint64_t v) { return std::popcount(v) == electrons; }));
+		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
 
 		++step;
 	});
@@ -134,18 +131,16 @@ TEST_CASE("Self test input data", "[self-test]")
 	REQUIRE(step == loader.ansatz_size());
 }
 
-TEST_CASE("Test evolve operator", "[simple]")
-{
+TEST_CASE("Test evolve operator", "[simple]") {
 	using std::begin;
 	using std::end;
 
 	test_data_loader loader("example_evolution.bin");
-	loader.for_each_step([&] (
-		std::span<std::uint64_t const> wfn_in,
-		std::span<std::uint64_t const> wfn_out,
-		std::uint64_t activation,
-		std::uint64_t deactivation
-	) {
+	loader.for_each_step([&](
+							 std::span<std::uint64_t const> wfn_in,
+							 std::span<std::uint64_t const> wfn_out,
+							 std::uint64_t activation,
+							 std::uint64_t deactivation) {
 		// print wfn_in!!!
 		for (auto i : wfn_in) {
 			std::cout << i << " ";
@@ -160,8 +155,7 @@ TEST_CASE("Test evolve operator", "[simple]")
 	});
 }
 
-TEST_CASE("Test evolve ansatz", "[simple]")
-{
+TEST_CASE("Test evolve ansatz", "[simple]") {
 	using std::begin;
 	using std::end;
 
