@@ -1,3 +1,4 @@
+module load cuda/12.5 gcc/13.1.0
 export localdir=$(pwd)
 rm -rf $SCRATCH/build
 mkdir $SCRATCH/build
