@@ -41,6 +41,8 @@ __global__ void evolve_operator_kernel(
 		wave_out[idx+size[0]] = 0;
 	}
 
+	printf("Block %u, Thread %u finished ", blockIdx.x, threadIdx.x);
+
 	//*size = output_elements;
 
 
@@ -107,8 +109,12 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 	);
 
 
+
+
 	
 	cudaDeviceSynchronize();
+
+	printf("Kernel finished\n");
 
 	thrust::sort(wave_out_span.data(), wave_out_span.data()+2*num_elements[0]);
 
@@ -183,5 +189,44 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 )
 {
 	/* TODO */
-	return {nullptr, 0};
+	size_t iterations = activations.size();
+	size_t result_size;
+	auto wave_out = pmpp::make_managed_cuda_array<std::uint64_t>(2 * size(device_wavefunction));
+	auto wave_out_span = cuda::std::span(wave_out.get(), 2 * size(device_wavefunction));
+	
+	printf("evolve_operator: Copying Wavefunctions to output Array\n");
+	std::copy_n(device_wavefunction.data(), size(device_wavefunction), wave_out_span.data());
+	//uint64_t activation
+
+	printf("Initial number of operators: %lu\n", iterations);
+	printf("Entries of wavefunction:\n");
+
+	for(size_t k=0; k<device_wavefunction.size(); k++){
+		printf("%lu ", device_wavefunction.data()[k]);
+	}
+	printf("\n");
+	for(size_t i=0; i<iterations; i++){
+		printf("Loop Number: %lu\n", i);
+		/*
+		if (i == 0){
+			auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
+		} else {
+			auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
+		}
+		*/
+		auto [result_wavefunct, result_size] = evolve_operator(wave_out_span, activations[i], deactivations[i]);
+
+		printf("Result_size=%lu\n", result_size);
+		printf("Entries of wavefunction:\n");
+		for(size_t j=0; j<result_size; j++){
+			printf("%lu\n", result_wavefunct[j]);
+		}
+
+		auto wave_out_span = cuda::std::span(result_wavefunct.get(), 2*result_size);
+
+	}
+
+	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result {wave_out_span.data(), result_size};
+	return result;
+	// return {nullptr, 0};
 }
