@@ -31,7 +31,9 @@ std::vector<std::uint64_t> evolve_operator_host(
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
 
 	auto t1 = std::chrono::system_clock::now();
-	std::printf("Time: %ld µs\n", std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+	std::printf("Operator time with %ld wavefunctions: %ld µs\n",
+				size(host_wavefunction),
+				std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 	return result;
 }
 
@@ -63,7 +65,10 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
 
 	auto t1 = std::chrono::system_clock::now();
-	std::printf("Time: %ld µs\n", std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+	std::printf("Ansatz time with %ld wavefunctions and %ld operators: %ld µs\n",
+				size(host_wavefunction),
+				size(host_activations),
+				std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 
 	return result;
 }
