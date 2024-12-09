@@ -56,7 +56,6 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 	// auto wave_out_span = cuda::std::span(wave_out.get(), 2 * device_wavefunction.size());
 	std::uint64_t *wave_out_ptr;
 	cudaMallocManaged(&wave_out_ptr, 2 * device_wavefunction.size() * sizeof(std::uint64_t));
-	cudaMemset(wave_out_ptr, 0, 2 * device_wavefunction.size() * sizeof(std::uint64_t));
 	auto wave_out_span = cuda::std::span(wave_out_ptr, 2 * device_wavefunction.size());
 
 	// Copy the input array to the output array
