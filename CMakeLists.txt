@@ -16,6 +16,12 @@ endforeach()
 if(MSVC)
 	add_link_options(/NODEFAULTLIB:LIBCMT)
 endif()
+if(NOT MSVC)
+    string(APPEND CMAKE_CXX_FLAGS_DEBUG " -g -Wall -Wextra -Wpedantic")
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    string(APPEND CMAKE_CUDA_FLAGS_DEBUG " -G")
+endif()
 
 add_compile_options(
 	$<$<COMPILE_LANGUAGE:CUDA>:--default-stream=per-thread>
@@ -65,6 +71,10 @@ add_executable(
 	test_data_loader.cpp
 	test_data_loader.hpp
 )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+	message("Debug build with -G flag")
+    target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
+endif()
 
 target_link_libraries(
 	test_pmpp_final

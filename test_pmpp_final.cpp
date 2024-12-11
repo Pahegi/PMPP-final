@@ -1,52 +1,51 @@
+#include <stdio.h>
+
+#include <algorithm>
+#include <bit>
+#include <catch2/catch_test_macros.hpp>
+#include <iostream>
+#include <random>
+#include <span>
+#include <unordered_set>
+#include <vector>
 #include <waveform_evolution.hpp>
 
 #include "test_data_loader.hpp"
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
-#include <bit>
-#include <unordered_set>
-#include <span>
-#include <vector>
-#include <iostream>
-#include <stdio.h>
-
 std::vector<std::uint64_t> evolve_operator_host(
 	std::span<std::uint64_t const> host_wavefunction,
-	std::uint64_t activation, std::uint64_t deactivation
-)
-{
-	using std::size;
+	std::uint64_t activation, std::uint64_t deactivation) {
 	using std::data;
+	using std::size;
 
-	printf("evolve_operator_host: Allocating managed cuda array for wavefunctions\n");
-	printf("host_wavefunction.size(): %lu\n", host_wavefunction.size());
+	auto t0 = std::chrono::system_clock::now();
+
 	auto device_wavefunction_ptr = pmpp::make_managed_cuda_array<std::uint64_t>(host_wavefunction.size());
-	printf("device_wavefunction_ptr: %p\n", device_wavefunction_ptr.get());
 	auto device_wavefunction = cuda::std::span(device_wavefunction_ptr.get(), host_wavefunction.size());
 
-	printf("evolve_operator_host: Copying host wavefunction to device\n");
 	std::copy_n(data(host_wavefunction), size(host_wavefunction), device_wavefunction.data());
 
-	printf("evolve_operator_host: Calling Evolve operator\n");
 	auto [result_wavefunction, result_size] = evolve_operator(device_wavefunction, activation, deactivation);
 
-	printf("evolve_operator_host: Copying result back to host\n");
 	std::vector<std::uint64_t> result(result_size);
-	if(result_size)
+	if (result_size)
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
+
+	auto t1 = std::chrono::system_clock::now();
+	std::printf("Operator time with %ld wavefunctions: %ld µs\n",
+				size(host_wavefunction),
+				std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 	return result;
 }
 
 std::vector<std::uint64_t> evolve_ansatz_host(
 	std::span<std::uint64_t const> host_wavefunction,
 	std::span<std::uint64_t const> host_activations,
-	std::span<std::uint64_t const> host_deactivations
-)
-{
-	using std::size;
+	std::span<std::uint64_t const> host_deactivations) {
 	using std::data;
+	using std::size;
+
+	auto t0 = std::chrono::system_clock::now();
 
 	auto device_wavefunction_ptr = pmpp::make_managed_cuda_array<std::uint64_t>(size(host_wavefunction));
 	auto device_wavefunction = cuda::std::span(device_wavefunction_ptr.get(), size(host_wavefunction));
@@ -63,13 +62,61 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	auto [result_wavefunction, result_size] = evolve_ansatz(device_wavefunction, device_activations, device_deactivations);
 
 	std::vector<std::uint64_t> result(result_size);
-	if(result_size)
+	if (result_size)
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
+
+	auto t1 = std::chrono::system_clock::now();
+	std::printf("Ansatz time with %ld input wavefunctions, %ld operators and %ld output wavefunctions: %ld µs\n",
+				size(host_wavefunction),
+				size(host_activations),
+				result_size,
+				std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+
 	return result;
 }
 
-TEST_CASE("Self test input data", "[self-test]")
-{
+void run() {
+	std::vector<std::uint64_t> host_wavefunction;
+	std::vector<std::uint64_t> host_activations;
+	std::vector<std::uint64_t> host_deactivations;
+	std::uniform_int_distribution<std::uint64_t> bitdist(0, 63);
+	std::default_random_engine gen;
+
+	size_t num_wavefunctions = 1;
+	size_t num_operators = 1000;
+
+	for (std::size_t i = 0; i < num_wavefunctions; ++i) {
+		std::uint64_t wavefunction = 0;
+		for (std::size_t i = 0; i < 2; ++i) {
+			wavefunction |= 0x1lu << bitdist(gen);
+		}
+		host_wavefunction.push_back(wavefunction);
+	}
+	for (std::size_t i = 0; i < num_operators; ++i) {
+		std::uint64_t act = 1;
+		std::uint64_t dea = 1;
+		while ((act & dea) != 0) {
+			act = 0;
+			dea = 0;
+			act |= 0x1lu << bitdist(gen);
+			dea |= 0x1lu << bitdist(gen);
+			if ((bitdist(gen) & 0x1) == 1) {
+				act |= 0x1lu << bitdist(gen);
+				dea |= 0x1lu << bitdist(gen);
+			}
+		}
+		host_activations.push_back(act);
+		host_deactivations.push_back(dea);
+	}
+
+	evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
+}
+
+TEST_CASE("Test run with big data", "[simple]") {
+	run();
+}
+
+TEST_CASE("Self test input data", "[self-test]") {
 	test_data_loader loader("example_evolution.bin");
 
 	auto electrons = loader.electrons();
@@ -82,8 +129,7 @@ TEST_CASE("Self test input data", "[self-test]")
 
 	auto orbital_mask = (orbitals < 64 ? std::uint64_t(1) << orbitals : 0) - 1;
 
-	for(std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i)
-	{
+	for (std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i) {
 		auto n_activations = std::popcount(activations[i]);
 		auto n_deactivations = std::popcount(deactivations[i]);
 
@@ -98,12 +144,11 @@ TEST_CASE("Self test input data", "[self-test]")
 	}
 
 	std::size_t step = 0;
-	loader.for_each_step([&] (
-		std::span<std::uint64_t const> wfn_in,
-		std::span<std::uint64_t const> wfn_out,
-		std::uint64_t activation,
-		std::uint64_t deactivation
-	) {
+	loader.for_each_step([&](
+							 std::span<std::uint64_t const> wfn_in,
+							 std::span<std::uint64_t const> wfn_out,
+							 std::uint64_t activation,
+							 std::uint64_t deactivation) {
 		using std::begin;
 		using std::end;
 
@@ -116,17 +161,16 @@ TEST_CASE("Self test input data", "[self-test]")
 		REQUIRE(wfn_out_set.size() == wfn_out.size());
 
 		REQUIRE(wfn_in.size() <= wfn_out.size());
-		for(auto v : wfn_in)
+		for (auto v : wfn_in)
 			wfn_out_set.erase(v);
 		REQUIRE(wfn_out_set.size() == wfn_out.size() - wfn_in.size());
 
-		if(step == 0)
-		{
-			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&] (std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
-			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&] (std::uint64_t v) { return std::popcount(v) == electrons; }));
+		if (step == 0) {
+			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
 		}
-		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&] (std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
-		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&] (std::uint64_t v) { return std::popcount(v) == electrons; }));
+		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
 
 		++step;
 	});
@@ -134,34 +178,25 @@ TEST_CASE("Self test input data", "[self-test]")
 	REQUIRE(step == loader.ansatz_size());
 }
 
-TEST_CASE("Test evolve operator", "[simple]")
-{
+TEST_CASE("Test evolve operator", "[simple]") {
 	using std::begin;
 	using std::end;
 
 	test_data_loader loader("example_evolution.bin");
-	loader.for_each_step([&] (
-		std::span<std::uint64_t const> wfn_in,
-		std::span<std::uint64_t const> wfn_out,
-		std::uint64_t activation,
-		std::uint64_t deactivation
-	) {
-		// print wfn_in!!!
-		for (auto i : wfn_in) {
-			std::cout << i << " ";
-		}
-		printf("size of wfn_in: %lu\n", wfn_in.size());
-		printf("size of wfn_out: %lu\n", wfn_out.size());
-		// auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
-		// auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
-		// auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
-		// REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
-		// REQUIRE(wfn_out_set == wfn_out_dut_set);
+	loader.for_each_step([&](
+							 std::span<std::uint64_t const> wfn_in,
+							 std::span<std::uint64_t const> wfn_out,
+							 std::uint64_t activation,
+							 std::uint64_t deactivation) {
+		auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
+		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+		auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
+		REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
+		REQUIRE(wfn_out_set == wfn_out_dut_set);
 	});
 }
 
-TEST_CASE("Test evolve ansatz", "[simple]")
-{
+TEST_CASE("Test evolve ansatz", "[simple]") {
 	using std::begin;
 	using std::end;
 

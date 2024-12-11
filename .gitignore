@@ -1,2 +1,6 @@
 build
 /.vs
+build
+build_and_run.sh
+run.sh
+build.sh

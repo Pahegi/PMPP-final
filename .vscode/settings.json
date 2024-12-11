@@ -1,4 +1,12 @@
 {
+    "clang-format.style": "{ BasedOnStyle: Google, IndentWidth: 4}",
+    "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, IndentWidth: 4, ColumnLimit: 0, UseTab: Always, TabWidth: 4 }",
+    "editor.formatOnSave": true,
+    "editor.detectIndentation": false,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "prettier.tabWidth": 4,
+    "prettier.useTabs": true,
     "files.associations": {
         "__hash_table": "cpp",
         "__split_buffer": "cpp",
@@ -77,6 +85,7 @@
         "streambuf": "cpp",
         "thread": "cpp",
         "cinttypes": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "__locale": "cpp"
     }
 }
