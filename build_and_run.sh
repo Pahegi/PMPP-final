@@ -22,3 +22,11 @@ echo "___________________________"
 echo "ERR:"
 cat "$ERR"
 echo "___________________________"
+
+# Print nvprof output if it exists
+if [ -f "$SCRATCH/out/nvprof_trace.txt" ]; then
+	echo "___________________________"
+	echo "NVPROF:"
+	cat "$SCRATCH/out/nvprof_trace.txt"
+	echo "___________________________"
+fi

@@ -4,6 +4,7 @@
 #include <bit>
 #include <catch2/catch_test_macros.hpp>
 #include <iostream>
+#include <random>
 #include <span>
 #include <unordered_set>
 #include <vector>
@@ -65,12 +66,54 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 		cudaMemcpy(data(result), result_wavefunction.get(), sizeof(std::uint64_t) * result_size, cudaMemcpyDefault);
 
 	auto t1 = std::chrono::system_clock::now();
-	std::printf("Ansatz time with %ld wavefunctions and %ld operators: %ld µs\n",
+	std::printf("Ansatz time with %ld input wavefunctions, %ld operators and %ld output wavefunctions: %ld µs\n",
 				size(host_wavefunction),
 				size(host_activations),
+				result_size,
 				std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 
 	return result;
+}
+
+void run() {
+	std::vector<std::uint64_t> host_wavefunction;
+	std::vector<std::uint64_t> host_activations;
+	std::vector<std::uint64_t> host_deactivations;
+	std::uniform_int_distribution<std::uint64_t> bitdist(0, 63);
+	std::default_random_engine gen;
+
+	size_t num_wavefunctions = 1;
+	size_t num_operators = 1000;
+
+	for (std::size_t i = 0; i < num_wavefunctions; ++i) {
+		std::uint64_t wavefunction = 0;
+		for (std::size_t i = 0; i < 2; ++i) {
+			wavefunction |= 0x1lu << bitdist(gen);
+		}
+		host_wavefunction.push_back(wavefunction);
+	}
+	for (std::size_t i = 0; i < num_operators; ++i) {
+		std::uint64_t act = 1;
+		std::uint64_t dea = 1;
+		while ((act & dea) != 0) {
+			act = 0;
+			dea = 0;
+			act |= 0x1lu << bitdist(gen);
+			dea |= 0x1lu << bitdist(gen);
+			if ((bitdist(gen) & 0x1) == 1) {
+				act |= 0x1lu << bitdist(gen);
+				dea |= 0x1lu << bitdist(gen);
+			}
+		}
+		host_activations.push_back(act);
+		host_deactivations.push_back(dea);
+	}
+
+	evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
+}
+
+TEST_CASE("Test run with big data", "[simple]") {
+	run();
 }
 
 TEST_CASE("Self test input data", "[self-test]") {
