@@ -35,7 +35,7 @@ def plot_times(data, output_file):
         y = [float(row[2])/1000 for row in electron]
         line, = plt.plot(x, y)
         # Add a label to the beginning of the line
-        plt.annotate(f'{electron[0][1]}', xy=(x[0], y[0]), textcoords='offset points', xytext=(5,5), ha='right', color=line.get_color())
+        plt.annotate(f'{electron[0][1]}', xy=(x[-1], y[-1]), textcoords='offset points', xytext=(5,5), ha='left', color=line.get_color())
 
     plt.xlabel('Number of operators')
     plt.ylabel('Time (ms)')
@@ -60,11 +60,10 @@ def plot_sizes(data, output_file):
         y = [float(row[3]) for row in electron]
         line, = plt.plot(x, y)
         # Add a label to the beginning of the line
-        plt.annotate(f'{electron[0][1]}', xy=(x[0], y[0]), textcoords='offset points', xytext=(5, 5), ha='right',
-                     color=line.get_color())
+        plt.annotate(f'{electron[0][1]}', xy=(x[-1], y[-1]), textcoords='offset points', xytext=(5,5), ha='left', color=line.get_color())
 
     plt.xlabel('Number of operators')
-    plt.ylabel('waveform size')
+    plt.ylabel('Resulting waveform size')
     plt.savefig(output_file)
     plt.close()
 
