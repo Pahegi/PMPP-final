@@ -130,9 +130,12 @@ TEST_CASE("Test run with big data", "[simple]") {
 		exit(1);
 	}
 
+	// run single test to warm up the GPU
+	run(10, 100);
+
 	fprintf(f, "num_wavefunction, num_operator, time\n");
 	for (int num_operator = 1; num_operator <= 100; num_operator += 10) {
-		for (int num_wavefunction = 1; num_wavefunction <= 1000; num_wavefunction += 10) {
+		for (int num_wavefunction = 1; num_wavefunction <= 10000; num_wavefunction += 100) {
 			auto time = run(num_wavefunction, num_operator);
 			fprintf(f, "%d, %d, %ld\n", num_wavefunction, num_operator, time.count());
 			fflush(f);
