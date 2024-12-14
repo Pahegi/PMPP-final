@@ -19,6 +19,7 @@ struct test_data_loader
 	std::span<std::uint64_t const> activations() const noexcept;
 	std::span<std::uint64_t const> deactivations() const noexcept;
 
+	std::vector<std::uint64_t> first_wavefunction();
 	std::pair<std::vector<std::uint64_t>, std::vector<std::uint64_t>> first_and_last_wavefunction();
 	void for_each_step(std::function<void (std::span<std::uint64_t const>, std::span<std::uint64_t const>, std::uint64_t, std::uint64_t)> functor);
 

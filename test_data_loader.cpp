@@ -60,6 +60,24 @@ std::size_t test_data_loader::ansatz_size() const noexcept { return pimpl->activ
 std::span<std::uint64_t const> test_data_loader::activations() const noexcept { return pimpl->activations; }
 std::span<std::uint64_t const> test_data_loader::deactivations() const noexcept { return pimpl->deactivations; }
 
+std::vector<std::uint64_t> test_data_loader::first_wavefunction()
+{
+    auto f = pimpl->file.get();
+
+        if(std::fseek(f, pimpl->header_end, SEEK_SET))
+                throw std::runtime_error("failed to seek to header end");
+
+    std::size_t wavefunction_size = {};
+    if(std::fread(&wavefunction_size, sizeof(wavefunction_size), 1, f) != 1)
+        throw std::runtime_error("failed to read wavefunction size");
+
+    std::vector<std::uint64_t> first(wavefunction_size);
+    if(std::fread(first.data(), sizeof(first[0]), first.size(), f) != first.size())
+        throw std::runtime_error("failed to read wavefunction");
+
+    return first;
+}
+
 std::pair<std::vector<std::uint64_t>, std::vector<std::uint64_t>> test_data_loader::first_and_last_wavefunction()
 {
 	auto f = pimpl->file.get();
