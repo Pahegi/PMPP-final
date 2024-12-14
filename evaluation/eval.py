@@ -17,16 +17,25 @@ def main():
 
 
 def plot_data(data, output_file):
-	# first row is the header and can be ignored
-	# create matplotlib plot
-	# first column is the x-axis (number of operators)
-	# third column is the y-axis (time)
-	# create one line for each second column (number of inputs)
-	# save plot to output_file
+    # Ignore the first row (header)
+    header = data[0]
+    data = data[1:]
 
-	plt.plot(data[1:, 0], data[1:, 2])
-	plt.savefig(output_file)
-	plt.close()
+    # Extract unique values from the second column (number of inputs)
+    unique_inputs = sorted(set(row[1] for row in data))
+
+    # Create a plot for each unique value in the second column
+    for input_value in unique_inputs:
+        x = [int(row[0]) for row in data if row[1] == input_value]
+        y = [float(row[2])/1000 for row in data if row[1] == input_value]
+        line, = plt.plot(x, y)
+        # Add a label to the beginning of the line
+        plt.annotate(f'{input_value}', xy=(x[0], y[0]), textcoords='offset points', xytext=(5,5), ha='right', color=line.get_color())
+
+    plt.xlabel('Number of operators')
+    plt.ylabel('Time (ms)')
+    plt.savefig(output_file)
+    plt.close()
 
 
 
