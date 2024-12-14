@@ -3,9 +3,13 @@
 #include <algorithm>
 #include <bit>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <random>
 #include <span>
+#include <sstream>
+#include <string>
 #include <unordered_set>
 #include <vector>
 #include <waveform_evolution.hpp>
@@ -75,15 +79,12 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	return result;
 }
 
-void run() {
+std::chrono::microseconds run(int num_wavefunctions, int num_operators) {
 	std::vector<std::uint64_t> host_wavefunction;
 	std::vector<std::uint64_t> host_activations;
 	std::vector<std::uint64_t> host_deactivations;
 	std::uniform_int_distribution<std::uint64_t> bitdist(0, 63);
 	std::default_random_engine gen;
-
-	size_t num_wavefunctions = 1;
-	size_t num_operators = 1000;
 
 	for (std::size_t i = 0; i < num_wavefunctions; ++i) {
 		std::uint64_t wavefunction = 0;
@@ -109,11 +110,36 @@ void run() {
 		host_deactivations.push_back(dea);
 	}
 
+	auto t0 = std::chrono::system_clock::now();
+	// run evolve_ansatz in seperate thread
+
 	evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
+	auto t1 = std::chrono::system_clock::now();
+	return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0);
 }
 
 TEST_CASE("Test run with big data", "[simple]") {
-	run();
+	auto now = std::chrono::system_clock::now();
+	auto in_time_t = std::chrono::system_clock::to_time_t(now);
+	std::stringstream ss;
+	ss << "output_" << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S") << ".csv";
+	auto filename = ss.str();
+	FILE *f = fopen(filename.c_str(), "a");
+	if (f == NULL) {
+		printf("Error opening file!\n");
+		exit(1);
+	}
+
+	fprintf(f, "num_wavefunction, num_operator, time\n");
+	for (int num_operator = 1; num_operator <= 100; num_operator += 10) {
+		for (int num_wavefunction = 1; num_wavefunction <= 1000; num_wavefunction += 10) {
+			auto time = run(num_wavefunction, num_operator);
+			fprintf(f, "%d, %d, %ld\n", num_wavefunction, num_operator, time.count());
+			fflush(f);
+		}
+	}
+
+	fclose(f);
 }
 
 TEST_CASE("Self test input data", "[self-test]") {
