@@ -4,28 +4,6 @@
 #include <algorithm>
 #include <waveform_evolution.hpp>
 
-void calculate_blocks_and_threads_xdim(int n, int *num_blocks, int *num_threads) {
-	int max_threads_per_block, max_grid_dim_x;
-
-	// Get device properties
-	cudaDeviceProp prop;
-	cudaGetDeviceProperties(&prop, 0);	// Assume using device 0
-	max_threads_per_block = prop.maxThreadsPerBlock;
-	max_grid_dim_x = prop.maxGridSize[0];  // Maximum number of blocks in the x-dimension
-
-	// Set num_threads based on a typical value or maximum supported by the device
-	*num_threads = (max_threads_per_block < 512) ? max_threads_per_block : 512;
-
-	// Calculate num_blocks
-	*num_blocks = (n + *num_threads - 1) / *num_threads;  // ceil(n / num_threads)
-
-	// Ensure num_blocks does not exceed the maximum grid size in x-dimension
-	if (*num_blocks > max_grid_dim_x) {
-		printf("Error: Too many blocks required (%d), exceeds device capability (%d).\n", *num_blocks, max_grid_dim_x);
-		*num_blocks = max_grid_dim_x;  // Cap at the maximum grid size
-	}
-}
-
 __global__ void evolve_operator_kernel(
 	std::uint64_t const *device_wavefunction,
 	std::uint64_t *wave_out,
@@ -62,12 +40,13 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 	size_t num_ed = device_wavefunction.size();
 	cudaMemcpy(wave_out_span.data(), device_wavefunction.data(), device_wavefunction.size() * sizeof(uint64_t), cudaMemcpyDeviceToDevice);
 
-	// optimize number of blocks and threads
-	int num_blocks, num_threads;
-	calculate_blocks_and_threads_xdim(num_ed, &num_blocks, &num_threads);
-
 	// launch kernel
-	evolve_operator_kernel<<<num_blocks, num_threads>>>(
+	int block_size;		// The launch configurator returned block size
+	int min_grid_size;	// The minimum grid size needed to achieve the maximum occupancy for a full device launch
+	int grid_size;		// The actual grid size needed, based on input size
+	cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size, evolve_operator_kernel, 0, 0);
+	grid_size = (num_ed + block_size - 1) / block_size;	 // Round up according to array size
+	evolve_operator_kernel<<<grid_size, block_size>>>(
 		device_wavefunction.data(),
 		wave_out_span.data(),
 		num_ed,

@@ -161,8 +161,6 @@ TEST_CASE("Print input data", "[simple]") {
 		"electrons-20_orbitals-40.bin",
 		"electrons-25_orbitals-50.bin",
 	};
-
-	for
 }
 
 // TEST_CASE("Test big input data", "[simple]") {
