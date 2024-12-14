@@ -9,6 +9,10 @@ rm $FILE
 rm $ERR
 rm -rf "$SCRATCH/out"
 
+# copy input files to $SCRATCH
+cp -r ./data/*.bin $SCRATCH
+cp -r ./data/*.bin $SCRATCH/build
+
 echo "Running job..."
 sbatch --wait run.sh
 
@@ -33,3 +37,10 @@ fi
 
 # copy back only csv output files from $SCRATCH into ./evaluation/csv
 cp -r $SCRATCH/*.csv ./evaluation/csv
+
+# remove all tmp files from $SCRATCH
+# rm -rf $SCRATCH/*.csv
+# rm -rf $SCRATCH/*.bin
+# rm -rf $SCRATCH/test.out
+# rm -rf $SCRATCH/test.err
+# rm -rf $SCRATCH/out

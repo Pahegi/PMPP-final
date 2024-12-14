@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <bitset>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <iomanip>
@@ -15,6 +16,8 @@
 #include <waveform_evolution.hpp>
 
 #include "test_data_loader.hpp"
+
+const auto INPUT_FILE = "example_evolution.bin";
 
 std::vector<std::uint64_t> evolve_operator_host(
 	std::span<std::uint64_t const> host_wavefunction,
@@ -79,7 +82,7 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	return result;
 }
 
-std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num_operators) {
+std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num_operators, int num_electrons = 2) {
 	std::vector<std::uint64_t> host_wavefunction;
 	std::vector<std::uint64_t> host_activations;
 	std::vector<std::uint64_t> host_deactivations;
@@ -88,7 +91,7 @@ std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num
 
 	for (std::size_t i = 0; i < num_wavefunctions; ++i) {
 		std::uint64_t wavefunction = 0;
-		for (std::size_t i = 0; i < 2; ++i) {
+		for (std::size_t i = 0; i < num_electrons; ++i) {
 			wavefunction |= 0x1lu << bitdist(gen);
 		}
 		host_wavefunction.push_back(wavefunction);
@@ -118,7 +121,10 @@ std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num
 	return {std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0), result.size()};
 }
 
-TEST_CASE("Test run with big data", "[simple]") {
+TEST_CASE("Test runs with custom sized inputs", "[simple]") {
+	std::cout << "Running test runs with custom sized inputs" << std::endl;
+
+	// create output file
 	auto now = std::chrono::system_clock::now();
 	auto in_time_t = std::chrono::system_clock::to_time_t(now);
 	std::stringstream ss;
@@ -131,13 +137,14 @@ TEST_CASE("Test run with big data", "[simple]") {
 	}
 
 	// run single test to warm up the GPU
-	run(10, 100);
+	run(1, 20, 2);
 
-	fprintf(f, "num_wavefunction, num_operator, time\n");
-	for (int num_operator = 1; num_operator <= 100; num_operator += 10) {
+	// run multiple tests and write to csv
+	fprintf(f, "num_wavefunction, num_electrons, time, size\n");
+	for (int num_electrons = 1; num_electrons <= 10; num_electrons += 1) {
 		for (int num_wavefunction = 1; num_wavefunction <= 10000; num_wavefunction += 100) {
-			auto [time, size] = run(num_wavefunction, num_operator);
-			fprintf(f, "%d, %d, %ld, %d\n", num_wavefunction, num_operator, time.count(), size);
+			auto [time, size] = run(num_wavefunction, 1, num_electrons);
+			fprintf(f, "%d, %d, %ld, %d\n", num_wavefunction, num_electrons, time.count(), size);
 			fflush(f);
 		}
 	}
@@ -145,8 +152,31 @@ TEST_CASE("Test run with big data", "[simple]") {
 	fclose(f);
 }
 
+TEST_CASE("Print input data", "[simple]") {
+	// array of input files
+	auto input_files = {
+		"example_evolution.bin",
+		"electrons-10_orbitals-20.bin",
+		"electrons-15_orbitals-30.bin",
+		"electrons-20_orbitals-40.bin",
+		"electrons-25_orbitals-50.bin",
+	};
+
+	for
+}
+
+// TEST_CASE("Test big input data", "[simple]") {
+// 	std::cout << "Running test bigger input data" << std::endl;
+
+// 	test_data_loader loader("electrons-10_orbitals-20.bin");
+// 	auto wfn_in = loader.first_wavefunction();
+// 	auto wfn_out = evolve_ansatz_host(wfn_in, loader.activations(), loader.deactivations());
+// 	std::cout << "Output data size:" << wfn_out.size() << std::endl;
+// }
+
 TEST_CASE("Self test input data", "[self-test]") {
-	test_data_loader loader("example_evolution.bin");
+	std::cout << "Running self test input data" << std::endl;
+	test_data_loader loader(INPUT_FILE);
 
 	auto electrons = loader.electrons();
 	auto orbitals = loader.single_electron_density_count();
@@ -211,7 +241,9 @@ TEST_CASE("Test evolve operator", "[simple]") {
 	using std::begin;
 	using std::end;
 
-	test_data_loader loader("example_evolution.bin");
+	std::cout << "Running test evolve operator" << std::endl;
+
+	test_data_loader loader(INPUT_FILE);
 	loader.for_each_step([&](
 							 std::span<std::uint64_t const> wfn_in,
 							 std::span<std::uint64_t const> wfn_out,
@@ -229,7 +261,9 @@ TEST_CASE("Test evolve ansatz", "[simple]") {
 	using std::begin;
 	using std::end;
 
-	test_data_loader loader("example_evolution.bin");
+	std::cout << "Running test evolve ansatz" << std::endl;
+
+	test_data_loader loader(INPUT_FILE);
 	auto [wfn_in, wfn_out] = loader.first_and_last_wavefunction();
 	auto wfn_out_dut = evolve_ansatz_host(wfn_in, loader.activations(), loader.deactivations());
 	auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
