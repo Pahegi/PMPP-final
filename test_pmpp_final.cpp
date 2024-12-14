@@ -151,7 +151,7 @@ TEST_CASE("Test runs with custom sized inputs", "[simple]") {
 
 	int electron_increment = 1;
 	int operator_increment = 100;
-	std::chrono::milliseconds timeout = std::chrono::milliseconds(15000);
+	std::chrono::milliseconds timeout = std::chrono::milliseconds(60000);
 
 	// create output file
 	auto now = std::chrono::system_clock::now();
@@ -168,17 +168,24 @@ TEST_CASE("Test runs with custom sized inputs", "[simple]") {
 	// run single test to warm up the GPU
 	run(1, 20, 2);
 
-	// run multiple tests and write to csv
-	bool timeout_outer = false;
+	// write csv header
 	fprintf(f, "num_operators, num_electrons, time, size\n");
+
+	// run tests until timeout
+	bool timeout_outer = false;
+	// iterate over number of electrons
 	for (int num_electrons = 1; num_electrons <= 25; num_electrons += electron_increment) {
 		if (timeout_outer) break;
+		// iterate over number of operators
 		for (int num_operators = 1; num_operators <= 1000000; num_operators += operator_increment) {
+			// run test
 			auto [time, size] = run(1, num_operators, num_electrons, timeout);
+			// handle timeout
 			if (size == 0) {
-				if (num_operators == 1) timeout_outer = true;
+				if (num_operators == 2) timeout_outer = true;
 				break;
 			}
+			// append to csv
 			fprintf(f, "%d, %d, %ld, %d\n", num_operators, num_electrons, time.count(), size);
 			fflush(f);
 		}
