@@ -30,3 +30,6 @@ if [ -f "$SCRATCH/out/nvprof_trace.txt" ]; then
 	cat "$SCRATCH/out/nvprof_trace.txt"
 	echo "___________________________"
 fi
+
+# copy back only csv output files from $SCRATCH into ./evaluation/csv
+cp -r $SCRATCH/*.csv ./evaluation/csv
