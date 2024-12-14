@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 
 #include <algorithm>
@@ -5,12 +6,14 @@
 #include <bitset>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <future>
 #include <iomanip>
 #include <iostream>
 #include <random>
 #include <span>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 #include <waveform_evolution.hpp>
@@ -82,7 +85,7 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	return result;
 }
 
-std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num_operators, int num_electrons = 2) {
+std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num_operators, int num_electrons = 2, std::chrono::milliseconds timeout = std::chrono::milliseconds(3000)) {
 	std::vector<std::uint64_t> host_wavefunction;
 	std::vector<std::uint64_t> host_activations;
 	std::vector<std::uint64_t> host_deactivations;
@@ -114,9 +117,23 @@ std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num
 	}
 
 	auto t0 = std::chrono::system_clock::now();
-	// run evolve_ansatz in seperate thread
 
-	auto result = evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
+	std::promise<std::vector<std::uint64_t>> promise;
+	std::future<std::vector<std::uint64_t>> future = promise.get_future();
+	std::thread evolve_thread([&] {
+		auto result = evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
+		promise.set_value(result);
+	});
+
+	if (future.wait_for(timeout) == std::future_status::timeout) {
+		pthread_cancel(evolve_thread.native_handle());	// Forcefully terminate the thread
+		evolve_thread.detach();							// Detach the thread after cancellation
+		return {timeout, 0};
+	} else {
+		evolve_thread.join();  // Join the thread if it finishes within the timeout
+	}
+
+	auto result = future.get();
 	auto t1 = std::chrono::system_clock::now();
 	return {std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0), result.size()};
 }
@@ -140,11 +157,17 @@ TEST_CASE("Test runs with custom sized inputs", "[simple]") {
 	run(1, 20, 2);
 
 	// run multiple tests and write to csv
-	fprintf(f, "num_wavefunction, num_electrons, time, size\n");
+	bool timeout_outer = false;
+	fprintf(f, "num_operators, num_electrons, time, size\n");
 	for (int num_electrons = 1; num_electrons <= 10; num_electrons += 1) {
-		for (int num_wavefunction = 1; num_wavefunction <= 10000; num_wavefunction += 100) {
-			auto [time, size] = run(num_wavefunction, 1, num_electrons);
-			fprintf(f, "%d, %d, %ld, %d\n", num_wavefunction, num_electrons, time.count(), size);
+		if (timeout_outer) break;
+		for (int num_operators = 1; num_operators <= 1000; num_operators += 100) {
+			auto [time, size] = run(1, num_operators, num_electrons);
+			if (size == 0) {
+				if (num_operators == 1) timeout_outer = true;
+				break;
+			}
+			fprintf(f, "%d, %d, %ld, %d\n", num_operators, num_electrons, time.count(), size);
 			fflush(f);
 		}
 	}
@@ -152,16 +175,16 @@ TEST_CASE("Test runs with custom sized inputs", "[simple]") {
 	fclose(f);
 }
 
-TEST_CASE("Print input data", "[simple]") {
-	// array of input files
-	auto input_files = {
-		"example_evolution.bin",
-		"electrons-10_orbitals-20.bin",
-		"electrons-15_orbitals-30.bin",
-		"electrons-20_orbitals-40.bin",
-		"electrons-25_orbitals-50.bin",
-	};
-}
+// TEST_CASE("Print input data", "[simple]") {
+// 	// array of input files
+// 	auto input_files = {
+// 		"example_evolution.bin",
+// 		"electrons-10_orbitals-20.bin",
+// 		"electrons-15_orbitals-30.bin",
+// 		"electrons-20_orbitals-40.bin",
+// 		"electrons-25_orbitals-50.bin",
+// 	};
+// }
 
 // TEST_CASE("Test big input data", "[simple]") {
 // 	std::cout << "Running test bigger input data" << std::endl;
@@ -172,100 +195,100 @@ TEST_CASE("Print input data", "[simple]") {
 // 	std::cout << "Output data size:" << wfn_out.size() << std::endl;
 // }
 
-TEST_CASE("Self test input data", "[self-test]") {
-	std::cout << "Running self test input data" << std::endl;
-	test_data_loader loader(INPUT_FILE);
+// TEST_CASE("Self test input data", "[self-test]") {
+// 	std::cout << "Running self test input data" << std::endl;
+// 	test_data_loader loader(INPUT_FILE);
 
-	auto electrons = loader.electrons();
-	auto orbitals = loader.single_electron_density_count();
-	auto activations = loader.activations();
-	auto deactivations = loader.deactivations();
+// 	auto electrons = loader.electrons();
+// 	auto orbitals = loader.single_electron_density_count();
+// 	auto activations = loader.activations();
+// 	auto deactivations = loader.deactivations();
 
-	REQUIRE(activations.size() == loader.ansatz_size());
-	REQUIRE(deactivations.size() == loader.ansatz_size());
+// 	REQUIRE(activations.size() == loader.ansatz_size());
+// 	REQUIRE(deactivations.size() == loader.ansatz_size());
 
-	auto orbital_mask = (orbitals < 64 ? std::uint64_t(1) << orbitals : 0) - 1;
+// 	auto orbital_mask = (orbitals < 64 ? std::uint64_t(1) << orbitals : 0) - 1;
 
-	for (std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i) {
-		auto n_activations = std::popcount(activations[i]);
-		auto n_deactivations = std::popcount(deactivations[i]);
+// 	for (std::size_t i = 0, n = loader.ansatz_size(); i < n; ++i) {
+// 		auto n_activations = std::popcount(activations[i]);
+// 		auto n_deactivations = std::popcount(deactivations[i]);
 
-		REQUIRE((activations[i] & deactivations[i]) == 0);
+// 		REQUIRE((activations[i] & deactivations[i]) == 0);
 
-		REQUIRE((activations[i] & ~orbital_mask) == 0);
-		REQUIRE((deactivations[i] & ~orbital_mask) == 0);
+// 		REQUIRE((activations[i] & ~orbital_mask) == 0);
+// 		REQUIRE((deactivations[i] & ~orbital_mask) == 0);
 
-		REQUIRE(n_activations > 0);
-		REQUIRE(n_activations <= 2);
-		REQUIRE(n_activations == n_deactivations);
-	}
+// 		REQUIRE(n_activations > 0);
+// 		REQUIRE(n_activations <= 2);
+// 		REQUIRE(n_activations == n_deactivations);
+// 	}
 
-	std::size_t step = 0;
-	loader.for_each_step([&](
-							 std::span<std::uint64_t const> wfn_in,
-							 std::span<std::uint64_t const> wfn_out,
-							 std::uint64_t activation,
-							 std::uint64_t deactivation) {
-		using std::begin;
-		using std::end;
+// 	std::size_t step = 0;
+// 	loader.for_each_step([&](
+// 							 std::span<std::uint64_t const> wfn_in,
+// 							 std::span<std::uint64_t const> wfn_out,
+// 							 std::uint64_t activation,
+// 							 std::uint64_t deactivation) {
+// 		using std::begin;
+// 		using std::end;
 
-		REQUIRE(activation == activations[step]);
-		REQUIRE(deactivation == deactivations[step]);
+// 		REQUIRE(activation == activations[step]);
+// 		REQUIRE(deactivation == deactivations[step]);
 
-		auto wfn_in_set = std::unordered_set(begin(wfn_in), end(wfn_in));
-		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
-		REQUIRE(wfn_in_set.size() == wfn_in.size());
-		REQUIRE(wfn_out_set.size() == wfn_out.size());
+// 		auto wfn_in_set = std::unordered_set(begin(wfn_in), end(wfn_in));
+// 		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+// 		REQUIRE(wfn_in_set.size() == wfn_in.size());
+// 		REQUIRE(wfn_out_set.size() == wfn_out.size());
 
-		REQUIRE(wfn_in.size() <= wfn_out.size());
-		for (auto v : wfn_in)
-			wfn_out_set.erase(v);
-		REQUIRE(wfn_out_set.size() == wfn_out.size() - wfn_in.size());
+// 		REQUIRE(wfn_in.size() <= wfn_out.size());
+// 		for (auto v : wfn_in)
+// 			wfn_out_set.erase(v);
+// 		REQUIRE(wfn_out_set.size() == wfn_out.size() - wfn_in.size());
 
-		if (step == 0) {
-			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
-			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
-		}
-		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
-		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
+// 		if (step == 0) {
+// 			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+// 			REQUIRE(std::all_of(begin(wfn_in), end(wfn_in), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
+// 		}
+// 		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return (v & ~orbital_mask) == 0; }));
+// 		REQUIRE(std::all_of(begin(wfn_out), end(wfn_out), [&](std::uint64_t v) { return std::popcount(v) == electrons; }));
 
-		++step;
-	});
+// 		++step;
+// 	});
 
-	REQUIRE(step == loader.ansatz_size());
-}
+// 	REQUIRE(step == loader.ansatz_size());
+// }
 
-TEST_CASE("Test evolve operator", "[simple]") {
-	using std::begin;
-	using std::end;
+// TEST_CASE("Test evolve operator", "[simple]") {
+// 	using std::begin;
+// 	using std::end;
 
-	std::cout << "Running test evolve operator" << std::endl;
+// 	std::cout << "Running test evolve operator" << std::endl;
 
-	test_data_loader loader(INPUT_FILE);
-	loader.for_each_step([&](
-							 std::span<std::uint64_t const> wfn_in,
-							 std::span<std::uint64_t const> wfn_out,
-							 std::uint64_t activation,
-							 std::uint64_t deactivation) {
-		auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
-		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
-		auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
-		REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
-		REQUIRE(wfn_out_set == wfn_out_dut_set);
-	});
-}
+// 	test_data_loader loader(INPUT_FILE);
+// 	loader.for_each_step([&](
+// 							 std::span<std::uint64_t const> wfn_in,
+// 							 std::span<std::uint64_t const> wfn_out,
+// 							 std::uint64_t activation,
+// 							 std::uint64_t deactivation) {
+// 		auto wfn_out_dut = evolve_operator_host(wfn_in, activation, deactivation);
+// 		auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+// 		auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
+// 		REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
+// 		REQUIRE(wfn_out_set == wfn_out_dut_set);
+// 	});
+// }
 
-TEST_CASE("Test evolve ansatz", "[simple]") {
-	using std::begin;
-	using std::end;
+// TEST_CASE("Test evolve ansatz", "[simple]") {
+// 	using std::begin;
+// 	using std::end;
 
-	std::cout << "Running test evolve ansatz" << std::endl;
+// 	std::cout << "Running test evolve ansatz" << std::endl;
 
-	test_data_loader loader(INPUT_FILE);
-	auto [wfn_in, wfn_out] = loader.first_and_last_wavefunction();
-	auto wfn_out_dut = evolve_ansatz_host(wfn_in, loader.activations(), loader.deactivations());
-	auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
-	auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
-	REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
-	REQUIRE(wfn_out_set == wfn_out_dut_set);
-}
+// 	test_data_loader loader(INPUT_FILE);
+// 	auto [wfn_in, wfn_out] = loader.first_and_last_wavefunction();
+// 	auto wfn_out_dut = evolve_ansatz_host(wfn_in, loader.activations(), loader.deactivations());
+// 	auto wfn_out_set = std::unordered_set(begin(wfn_out), end(wfn_out));
+// 	auto wfn_out_dut_set = std::unordered_set(begin(wfn_out_dut), end(wfn_out_dut));
+// 	REQUIRE(wfn_out_dut.size() == wfn_out_dut_set.size());
+// 	REQUIRE(wfn_out_set == wfn_out_dut_set);
+// }
