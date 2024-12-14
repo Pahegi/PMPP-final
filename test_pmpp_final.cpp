@@ -51,7 +51,8 @@ std::vector<std::uint64_t> evolve_operator_host(
 std::vector<std::uint64_t> evolve_ansatz_host(
 	std::span<std::uint64_t const> host_wavefunction,
 	std::span<std::uint64_t const> host_activations,
-	std::span<std::uint64_t const> host_deactivations) {
+	std::span<std::uint64_t const> host_deactivations,
+	const std::atomic<bool>& terminate_thread) {
 	using std::data;
 	using std::size;
 
@@ -69,7 +70,7 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	auto device_deactivations = cuda::std::span(device_deactivations_ptr.get(), size(host_deactivations));
 	std::copy_n(data(host_deactivations), size(host_deactivations), device_deactivations.data());
 
-	auto [result_wavefunction, result_size] = evolve_ansatz(device_wavefunction, device_activations, device_deactivations);
+	auto [result_wavefunction, result_size] = evolve_ansatz(device_wavefunction, device_activations, device_deactivations, terminate_thread);
 
 	std::vector<std::uint64_t> result(result_size);
 	if (result_size)
@@ -120,17 +121,24 @@ std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num
 
 	std::promise<std::vector<std::uint64_t>> promise;
 	std::future<std::vector<std::uint64_t>> future = promise.get_future();
+	std::atomic<bool> promise_set(false);
+	std::atomic<bool> terminate_thread(false);
 	std::thread evolve_thread([&] {
-		auto result = evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
-		promise.set_value(result);
+		auto result = evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations, terminate_thread);
+		if (!promise_set.exchange(true) && !terminate_thread) {
+			promise.set_value(result);
+		}
 	});
 
 	if (future.wait_for(timeout) == std::future_status::timeout) {
-		pthread_cancel(evolve_thread.native_handle());	// Forcefully terminate the thread
-		evolve_thread.detach();							// Detach the thread after cancellation
+		terminate_thread.store(true);  // Signal termination
+		evolve_thread.join();		   // Ensure the thread stops cleanly
+		if (!promise_set.exchange(true)) {
+			promise.set_value({});
+		}
 		return {timeout, 0};
 	} else {
-		evolve_thread.join();  // Join the thread if it finishes within the timeout
+		evolve_thread.join();  // Join if the thread finishes naturally
 	}
 
 	auto result = future.get();
@@ -141,13 +149,17 @@ std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num
 TEST_CASE("Test runs with custom sized inputs", "[simple]") {
 	std::cout << "Running test runs with custom sized inputs" << std::endl;
 
+	int electron_increment = 1;
+	int operator_increment = 100;
+	std::chrono::milliseconds timeout = std::chrono::milliseconds(15000);
+
 	// create output file
 	auto now = std::chrono::system_clock::now();
 	auto in_time_t = std::chrono::system_clock::to_time_t(now);
 	std::stringstream ss;
 	ss << "output_" << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S") << ".csv";
 	auto filename = ss.str();
-	FILE *f = fopen(filename.c_str(), "a");
+	FILE* f = fopen(filename.c_str(), "a");
 	if (f == NULL) {
 		printf("Error opening file!\n");
 		exit(1);
@@ -159,10 +171,10 @@ TEST_CASE("Test runs with custom sized inputs", "[simple]") {
 	// run multiple tests and write to csv
 	bool timeout_outer = false;
 	fprintf(f, "num_operators, num_electrons, time, size\n");
-	for (int num_electrons = 1; num_electrons <= 10; num_electrons += 1) {
+	for (int num_electrons = 1; num_electrons <= 25; num_electrons += electron_increment) {
 		if (timeout_outer) break;
-		for (int num_operators = 1; num_operators <= 1000; num_operators += 100) {
-			auto [time, size] = run(1, num_operators, num_electrons);
+		for (int num_operators = 1; num_operators <= 1000000; num_operators += operator_increment) {
+			auto [time, size] = run(1, num_operators, num_electrons, timeout);
 			if (size == 0) {
 				if (num_operators == 1) timeout_outer = true;
 				break;

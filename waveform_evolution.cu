@@ -68,7 +68,8 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_operator(
 cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 	cuda::std::span<std::uint64_t const> device_wavefunction,
 	cuda::std::span<std::uint64_t const> activations,
-	cuda::std::span<std::uint64_t const> deactivations) {
+	cuda::std::span<std::uint64_t const> deactivations,
+	const std::atomic<bool> &terminate_thread) {
 	cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> result;
 	auto wave_out = pmpp::make_managed_cuda_array<std::uint64_t>(device_wavefunction.size());
 	auto wave_out_span = cuda::std::span(wave_out.get(), device_wavefunction.size());
@@ -76,6 +77,9 @@ cuda::std::pair<pmpp::cuda_ptr<std::uint64_t[]>, std::size_t> evolve_ansatz(
 	std::copy_n(device_wavefunction.data(), device_wavefunction.size(), wave_out_span.data());
 
 	for (size_t i = 0; i < activations.size(); i++) {
+		if (terminate_thread) {
+			return result;
+		}
 		result = evolve_operator(wave_out_span, activations[i], deactivations[i]);
 		wave_out_span = cuda::std::span(result.first.get(), result.second);
 	}
