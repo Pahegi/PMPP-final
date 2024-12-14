@@ -79,7 +79,7 @@ std::vector<std::uint64_t> evolve_ansatz_host(
 	return result;
 }
 
-std::chrono::microseconds run(int num_wavefunctions, int num_operators) {
+std::tuple<std::chrono::microseconds, size_t> run(int num_wavefunctions, int num_operators) {
 	std::vector<std::uint64_t> host_wavefunction;
 	std::vector<std::uint64_t> host_activations;
 	std::vector<std::uint64_t> host_deactivations;
@@ -113,9 +113,9 @@ std::chrono::microseconds run(int num_wavefunctions, int num_operators) {
 	auto t0 = std::chrono::system_clock::now();
 	// run evolve_ansatz in seperate thread
 
-	evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
+	auto result = evolve_ansatz_host(host_wavefunction, host_activations, host_deactivations);
 	auto t1 = std::chrono::system_clock::now();
-	return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0);
+	return {std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0), result.size()};
 }
 
 TEST_CASE("Test run with big data", "[simple]") {
@@ -136,8 +136,8 @@ TEST_CASE("Test run with big data", "[simple]") {
 	fprintf(f, "num_wavefunction, num_operator, time\n");
 	for (int num_operator = 1; num_operator <= 100; num_operator += 10) {
 		for (int num_wavefunction = 1; num_wavefunction <= 10000; num_wavefunction += 100) {
-			auto time = run(num_wavefunction, num_operator);
-			fprintf(f, "%d, %d, %ld\n", num_wavefunction, num_operator, time.count());
+			auto [time, size] = run(num_wavefunction, num_operator);
+			fprintf(f, "%d, %d, %ld, %d\n", num_wavefunction, num_operator, time.count(), size);
 			fflush(f);
 		}
 	}
